@@ -1,0 +1,90 @@
+package com.darayi.app
+
+import org.junit.Assert.*
+import org.junit.Test
+import java.math.BigDecimal
+import java.net.URL
+import java.io.ByteArrayInputStream
+import java.security.cert.Certificate
+import javax.net.ssl.HttpsURLConnection
+
+class PriceUpdaterTest {
+    private class Response(url: URL, private val status: Int, private val body: String) : HttpsURLConnection(url) {
+        override fun getResponseCode() = status
+        override fun getInputStream() = ByteArrayInputStream(body.toByteArray(Charsets.UTF_8))
+        override fun disconnect() {}
+        override fun connect() {}
+        override fun usingProxy() = false
+        override fun getCipherSuite() = "test"
+        override fun getLocalCertificates(): Array<Certificate>? = null
+        override fun getServerCertificates(): Array<Certificate> = emptyArray()
+    }
+    private fun holding(key: String, category: Int, manual: Boolean = false) = Holding(
+        name=key, key=key, qty=BigDecimal.ONE, measure="عدد", type=categories[category],
+        manual=manual, price=BigDecimal.TEN, unit="تومان"
+    )
+    private val cryptoBody = """{"status":"ok","stats":{"btc-rls":{"latest":"1000"}}}"""
+
+    @Test fun failedStocksPreserveCacheWhileCryptoAndNavasanStillUpdate() {
+        val visited = mutableListOf<String>()
+        val updater = PriceUpdater(PriceApiClient { url ->
+            visited += url.host
+            when (url.host) {
+                "api.brsapi.ir" -> Response(url, 403, "secret-stock-key")
+                "apiv2.nobitex.ir" -> Response(url, 200, cryptoBody)
+                "api.navasan.tech" -> Response(url, 200, """{"sekkeh":{"value":"270000"},"usd_sell":{"value":"266800"}}""")
+                else -> throw AssertionError("Unexpected provider")
+            }
+        })
+        val old = Quote(BigDecimal("99"), "تومان", "old")
+        val result = updater.refresh(listOf(holding("رمپنا", 2), holding("BTC", 3), holding("IR_COIN_EMAMI", 0)), mapOf("رمپنا" to old), "secret-stock-key", "nav-key")
+        assertEquals(listOf("api.brsapi.ir", "apiv2.nobitex.ir", "api.navasan.tech"), visited)
+        assertEquals(old, result.quotes["رمپنا"])
+        assertEquals(0, BigDecimal("100").compareTo(result.quotes["BTC"]!!.price))
+        assertEquals(0, BigDecimal("270000000").compareTo(result.quotes["IR_COIN_EMAMI"]!!.price))
+        assertEquals(0, BigDecimal("266800").compareTo(result.quotes["USD"]!!.price))
+        assertTrue(result.messages.any { it.contains("بورس") && it.contains("حفظ") })
+        assertFalse(result.messages.joinToString().contains("secret-stock-key"))
+    }
+
+    @Test fun missingKeysDoNotPreventPublicCryptoUpdate() {
+        val updater = PriceUpdater(PriceApiClient { url ->
+            assertEquals("apiv2.nobitex.ir", url.host)
+            Response(url, 200, cryptoBody)
+        })
+        val result = updater.refresh(listOf(holding("رمپنا", 2), holding("BTC", 3), holding("USD", 1)), emptyMap(), "", "")
+        assertEquals(setOf("BTC"), result.quotes.keys)
+        assertEquals(2, result.messages.count { it.contains("کلید") })
+    }
+
+    @Test fun failedNavasanKeepsCashDollarAndDoesNotReplaceItWithTether() {
+        val updater = PriceUpdater(PriceApiClient { url ->
+            when (url.host) {
+                "apiv2.nobitex.ir" -> Response(url, 200, """{"status":"ok","stats":{"usdt-rls":{"latest":"2650000"}}}""")
+                "api.navasan.tech" -> Response(url, 429, "rate limited")
+                else -> throw AssertionError("Unexpected provider")
+            }
+        })
+        val old = Quote(BigDecimal("260000"), "تومان", "old cash USD")
+        val result = updater.refresh(listOf(holding("USDT", 3)), mapOf("USD" to old), "", "nav-key")
+        assertEquals(old, result.quotes["USD"])
+        assertEquals(0, BigDecimal("265000").compareTo(result.quotes["USDT"]!!.price))
+        assertTrue(result.messages.any { it.contains("محدودیت") })
+    }
+
+    @Test fun absentHeldPriceIsReportedAndItsOldValuePreserved() {
+        val updater = PriceUpdater(PriceApiClient { Response(it, 200, """{"18ayar":{"value":"1000"}}""") })
+        val old = Quote(BigDecimal("999"), "تومان", "old")
+        val result = updater.refresh(listOf(holding("IR_GOLD_24K", 0)), mapOf("IR_GOLD_24K" to old), "", "nav-key")
+        assertEquals(old, result.quotes["IR_GOLD_24K"])
+        assertTrue(result.messages.any { it.contains("IR_GOLD_24K") && it.contains("دریافت نشد") })
+        assertEquals(0, BigDecimal("1000").compareTo(result.quotes["IR_GOLD_18K"]!!.price))
+    }
+
+    @Test fun emptyPortfolioOrManualPricesWithoutNavasanKeyMakeNoRequests() {
+        val updater = PriceUpdater(PriceApiClient { throw AssertionError("No network needed") })
+        assertTrue(updater.refresh(emptyList(), emptyMap(), "stock-key", "nav-key").quotes.isEmpty())
+        val manual = listOf(holding("BTC", 3, manual=true), holding("رمپنا", 2, manual=true))
+        assertTrue(updater.refresh(manual, emptyMap(), "stock-key", "").quotes.isEmpty())
+    }
+}

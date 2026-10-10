@@ -99,7 +99,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
   }
  }
  if(editorId!=null){val h=vm.holdings.find { it.id==editorId };HoldingEditor(h,onDismiss={editorId=null},onSave={vm.save(it);editorId=null},onDelete={vm.remove(it);editorId=null})}
- if(showSettings)SettingsDialog(vm.apiKey,vm.manualFx,{showSettings=false}){key,rate->vm.settings(key,rate);showSettings=false}
+ if(showSettings)SettingsDialog(vm.apiKey,vm.navasanKey,vm.manualFx,{showSettings=false}){key,navKey,rate->vm.settings(key,navKey,rate);showSettings=false}
 }
 @Composable fun HoldingCard(row:Valued,onClick:()->Unit){val h=row.holding;val q=row.quote;val change=q?.change
  Card(onClick=onClick,shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainer)){
@@ -154,7 +154,7 @@ private val presets=mapOf(
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(if(old==null)"افزودن دارایی" else "ویرایش دارایی",style=MaterialTheme.typography.headlineSmall,modifier=Modifier.weight(1f));IconButton(onClick=onDismiss){Icon(Icons.Default.Close,"بستن")}}
    Choice("نوع دارایی",category,categories){category=it}
    val options=presets[category].orEmpty()
-   if(options.isNotEmpty())Choice("انتخاب سریع",options.firstOrNull { it.second==key }?.first?:"انتخاب دارایی",options.map { it.first }){selected->val p=options.first { it.first==selected };name=p.first;key=p.second;measure=if(category==categories[0]&&key.startsWith("IR_GOLD"))"گرم" else if(category==categories[1])name else "عدد"}
+   if(options.isNotEmpty())Choice("انتخاب سریع",options.firstOrNull { it.second==key }?.first?:"انتخاب دارایی",options.map { it.first }){selected->val p=options.first { it.first==selected };name=p.first;key=p.second;if(key=="IR_GOLD_24K")manual=true;measure=if(category==categories[0]&&key.startsWith("IR_GOLD"))"گرم" else if(category==categories[1])name else "عدد"}
    OutlinedTextField(name,{name=it},label={Text("نام دارایی")},singleLine=true,modifier=Modifier.fillMaxWidth())
    if(!manual)OutlinedTextField(key,{key=it},label={Text("نماد منبع")},supportingText={Text(if(category==categories[2])"مثل رمپنا؛ قیمت آخرین معامله استفاده می‌شود" else "نماد با انتخاب سریع پر می‌شود")},singleLine=true,modifier=Modifier.fillMaxWidth())
    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
@@ -164,6 +164,7 @@ private val presets=mapOf(
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("قیمت را دستی وارد می‌کنم",modifier=Modifier.weight(1f));Switch(manual,{manual=it})}
    if(manual){Choice("واحد قیمت",unit,listOf("تومان","دلار")){unit=it};OutlinedTextField(price,{price=it},label={Text("قیمت هر واحد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
    Text("طلا را بر حسب گرم ثبت کن. ارزش طلا بدون اجرت، مالیات و کارمزد محاسبه می‌شود.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   if(key=="IR_GOLD_24K")Text("قیمت خودکار طلای ۲۴ عیار در این منبع موجود نیست؛ قیمت را دستی ثبت کن.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
    error?.let { Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp) }
    Button(onClick={val q=number(qty);val p=if(manual)number(price) else zero;if(name.isBlank()||measure.isBlank()||q==null||q<=zero||(!manual&&key.isBlank())||p==null||(manual&&p<=zero)){error="نام، مقدار مثبت و مشخصات قیمت را کامل کن."}else{onSave(Holding(id=old?.id?:java.util.UUID.randomUUID().toString(),name=name.trim(),key=symbol(key),qty=q,measure=measure.trim(),type=category,manual=manual,price=p,unit=unit))}},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ دارایی")}
    if(old!=null)TextButton(onClick={deleteConfirm=true},modifier=Modifier.fillMaxWidth()){Text("حذف دارایی",color=MaterialTheme.colorScheme.error)}
@@ -171,17 +172,20 @@ private val presets=mapOf(
  }
  if(deleteConfirm&&old!=null)AlertDialog(onDismissRequest={deleteConfirm=false},title={Text("حذف دارایی")},text={Text("${old.name} از فهرست حذف شود؟")},confirmButton={TextButton(onClick={onDelete(old)}){Text("حذف")}},dismissButton={TextButton(onClick={deleteConfirm=false}){Text("انصراف")}})
 }
-@Composable fun SettingsDialog(savedKey:String,savedFx:String,onDismiss:()->Unit,onSave:(String,String)->Unit){
- var key by rememberSaveable { mutableStateOf(savedKey) };var fx by rememberSaveable { mutableStateOf(savedFx) };var error by remember { mutableStateOf(false) };val context=LocalContext.current
+@Composable fun SettingsDialog(savedKey:String,savedNavasanKey:String,savedFx:String,onDismiss:()->Unit,onSave:(String,String,String)->Unit){
+ var key by rememberSaveable { mutableStateOf(savedKey) };var navKey by rememberSaveable { mutableStateOf(savedNavasanKey) };var fx by rememberSaveable { mutableStateOf(savedFx) };var error by remember { mutableStateOf(false) };val context=LocalContext.current
  ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
   Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=28.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
    Text("تنظیمات",style=MaterialTheme.typography.headlineSmall)
-   OutlinedTextField(key,{key=it},label={Text("کلید رایگان BRSAPI")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
+   OutlinedTextField(key,{key=it},label={Text("کلید BRSAPI برای بورس")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
+   OutlinedTextField(navKey,{navKey=it},label={Text("کلید نوسان برای ارز، طلا و سکه")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
+   Text("قیمت رمزارزها از بازار ریالی نوبیتکس دریافت و به تومان تبدیل می‌شود؛ کلید لازم نیست.",style=MaterialTheme.typography.bodySmall)
    OutlinedTextField(fx,{fx=it;error=false},label={Text("نرخ دستی دلار به تومان")},supportingText={Text("اختیاری؛ نرخ دریافتی دلار اولویت دارد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,isError=error,modifier=Modifier.fillMaxWidth())
    Text("دارایی‌ها روی همین گوشی ذخیره می‌شوند. فقط قیمت‌های بازار از منبع دریافت می‌شوند و فهرست دارایی‌ها ارسال نمی‌شود.",style=MaterialTheme.typography.bodySmall)
-   TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://brsapi.ir")))}){Text("دریافت کلید از سایت منبع قیمت")}
-   Button(onClick={val rate=number(fx);if(fx.isNotBlank()&&(rate==null||rate<=zero))error=true else onSave(key,rate?.toPlainString()?:"")},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ تنظیمات")}
-   Text("دارایی من · نسخهٔ ۲.۰",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://brsapi.ir")))}){Text("دریافت کلید بورس از BRSAPI")}
+   TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.navasan.tech/api/")))}){Text("دریافت کلید ارز و طلا از نوسان")}
+   Button(onClick={val rate=number(fx);if(fx.isNotBlank()&&(rate==null||rate<=zero))error=true else onSave(key,navKey,rate?.toPlainString()?:"")},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ تنظیمات")}
+   Text("دارایی من · نسخهٔ ۲.۱",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }
