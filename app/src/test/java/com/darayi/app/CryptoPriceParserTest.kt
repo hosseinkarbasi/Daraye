@@ -5,6 +5,15 @@ import org.junit.Test
 import java.math.BigDecimal
 
 class CryptoPriceParserTest {
+    @Test fun scaledMarketsAreConvertedToOneActualCoinWithoutUsingDollarRate() {
+        val quotes = CryptoPriceParser.nobitex("""{"status":"ok","stats":{"1k_shib-rls":{"latest":"100000","dayChange":"2"},"1m_pepe-rls":{"latest":"9000000"},"1b_babydoge-rls":{"latest":"20000000"},"100k_floki-rls":{"latest":"3000000"},"unknown_scale-rls":{"latest":"999"}}}""")
+        assertEquals(setOf("SHIB", "PEPE", "BABYDOGE", "FLOKI"), quotes.keys)
+        for ((key, price) in mapOf("SHIB" to "10", "PEPE" to "0.9", "BABYDOGE" to "0.002", "FLOKI" to "3"))
+            assertEquals(0, BigDecimal(price).compareTo(quotes[key]!!.price))
+        assertEquals(BigDecimal("2"), quotes["SHIB"]!!.change)
+        val holding = Holding(name="شیبا",key="SHIB",qty=BigDecimal("1000"),measure="عدد",type=AssetCategory.CRYPTO,manual=false,price=zero,unit="تومان")
+        assertEquals(0, BigDecimal("10000").compareTo(tomanValue(holding,quotes["SHIB"],zero)))
+    }
     @Test fun rialPricesPreservePrecisionAndDoNotNeedDollarRate() {
         val quotes = CryptoPriceParser.nobitex("""{"status":"ok","stats":{"btc-rls":{"isClosed":false,"latest":"219500000060","dayChange":"-0.36"}}}""")
         val q = quotes["BTC"]!!

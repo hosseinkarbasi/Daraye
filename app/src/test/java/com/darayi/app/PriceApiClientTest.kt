@@ -113,6 +113,31 @@ class PriceApiClientTest {
         expectFailure(PriceApiFailure.INVALID_RESPONSE) { client.crypto() }
     }
 
+    @Test fun completeCryptoCatalogUsesPublicOptionsWithoutAnApiKey() {
+        val client = PriceApiClient { url ->
+            assertEquals("apiv2.nobitex.ir",url.host)
+            assertEquals("/v2/options",url.path)
+            assertNull(url.query)
+            Response(url,body="""{"status":"ok","coins":[{"coin":"1k_shib","name":"SHIB","scale":"1000"},{"coin":"btc","name":"Bitcoin"}]}""")
+        }
+        assertEquals(setOf("BTC","SHIB"),client.cryptoAssets().map { it.key }.toSet())
+    }
+
+    @Test fun certificatePricesAndCatalogUseOneDedicatedRequestWithEncodedStockKey() {
+        var calls=0
+        val client=PriceApiClient { url ->
+            calls++
+            assertEquals("api.brsapi.ir",url.host)
+            assertEquals("/IME/Certificate.php",url.path)
+            assertEquals("key=stock+key%2B%26",url.query)
+            Response(url,body="""{"successful":true,"data":[{"contract_code":"CopperCthd","commodity":"مس کاتد","contract_currency":"ریال","pl":"37900000"}]}""")
+        }
+        val result=client.certificateMarket(" stock key+& ")
+        assertEquals(1,calls)
+        assertEquals(0,java.math.BigDecimal("3790000").compareTo(result.quotes["IME_COPPERCTHD"]!!.price))
+        assertEquals("گواهی",result.assets.single().measure)
+    }
+
     @Test fun navasanUsesItsOwnHttpsEndpointAndEncodedKey() {
         val client = PriceApiClient { url ->
             assertEquals("https", url.protocol)

@@ -128,4 +128,36 @@ class PriceUpdaterTest {
         val result = updater.refresh(listOf(holding("OTHER", 5)), emptyMap(), "", "")
         assertTrue(result.errors.single().contains("قیمت دستی"))
     }
+
+    @Test fun certificatesUseDedicatedApiInsteadOfRequestingOrdinaryShares() {
+        val requests=mutableListOf<String>()
+        val updater=PriceUpdater(PriceApiClient { url ->
+            requests+=url.path
+            assertEquals("/IME/Certificate.php",url.path)
+            Response(url,200,"""{"successful":true,"data":[{"contract_code":"SilverBar","commodity":"شمش نقره","contract_currency":"ریال","pl":"5294970"}]}""")
+        })
+        val result=updater.refresh(listOf(holding("IME_SILVERBAR",2)),emptyMap(),"stock-key","")
+        assertEquals(1,requests.size)
+        assertTrue(result.errors.isEmpty())
+        assertEquals("IME_SILVERBAR",result.certificateAssets.single().key)
+        assertTrue(result.stockAssets.isEmpty())
+    }
+
+    @Test fun failureOfCertificateApiKeepsItsCacheWhileSharesAndCryptoStillRefresh() {
+        val updater=PriceUpdater(PriceApiClient { url ->
+            when(url.path){
+                "/IME/Certificate.php"->Response(url,403,"do not show this body")
+                "/Tsetmc/AllSymbols.php"->Response(url,200,"""[{"l18":"غمهرا","pl":"1000"}]""")
+                "/market/stats"->Response(url,200,cryptoBody)
+                else->throw AssertionError("Unexpected endpoint")
+            }
+        })
+        val old=Quote(BigDecimal("99"),"تومان","old")
+        val result=updater.refresh(listOf(holding("IME_SILVERBAR",2),holding("غمهرا",2),holding("BTC",3)),mapOf("IME_SILVERBAR" to old),"stock-key","")
+        assertEquals(old,result.quotes["IME_SILVERBAR"])
+        assertNotNull(result.quotes["غمهرا"])
+        assertNotNull(result.quotes["BTC"])
+        assertTrue(result.errors.single().contains("گواهی"))
+        assertFalse(result.errors.single().contains("do not show this body"))
+    }
 }

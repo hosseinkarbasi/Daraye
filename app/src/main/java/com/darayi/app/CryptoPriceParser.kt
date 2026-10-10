@@ -15,12 +15,13 @@ object CryptoPriceParser {
         val result = mutableMapOf<String, Quote>()
         for (market in stats.keys()) {
             val parts = market.split('-')
-            if (parts.size != 2 || parts[1] != "rls" || !parts[0].matches(Regex("[a-z0-9]+"))) continue
+            if (parts.size != 2 || parts[1] != "rls") continue
+            val asset = CryptoSymbols.resolve(parts[0]) ?: continue
             val row = stats.optJSONObject(market) ?: continue
             if (row.optBoolean("isClosed")) continue
             val rial = number(row.optString("latest"))?.takeIf { it > zero } ?: continue
-            result[symbol(parts[0])] = Quote(
-                price = rial.divide(BigDecimal.TEN),
+            result[asset.key] = Quote(
+                price = rial.divide(BigDecimal.TEN).divide(asset.scale),
                 unit = "تومان",
                 stamp = "نوبیتکس · زمان دریافت: $received",
                 change = number(row.optString("dayChange")),

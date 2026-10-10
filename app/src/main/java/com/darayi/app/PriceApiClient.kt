@@ -53,6 +53,20 @@ class PriceApiClient(
         request("https://apiv2.nobitex.ir/market/stats?dstCurrency=rls"), CryptoPriceParser::nobitex
     )
 
+    fun cryptoAssets(): List<AssetOption> = decode(request("https://apiv2.nobitex.ir/v2/options"), AssetCatalog::crypto)
+
+    fun certificateMarket(key: String): StockMarketData = decode(certificateResponse(key)) {
+        StockMarketData(CertificatePriceParser.prices(it), AssetCatalog.certificates(it))
+    }
+
+    fun certificateAssets(key: String): List<AssetOption> = decode(certificateResponse(key), AssetCatalog::certificates)
+
+    private fun certificateResponse(key: String): String {
+        if (key.isBlank()) throw PriceApiException(PriceApiFailure.MISSING_KEY)
+        val encoded = URLEncoder.encode(key.trim(), "UTF-8")
+        return request("https://api.brsapi.ir/IME/Certificate.php?key=$encoded")
+    }
+
     fun navasan(key: String): Map<String, Quote> {
         if (key.isBlank()) throw PriceApiException(PriceApiFailure.MISSING_KEY)
         val encoded = URLEncoder.encode(key.trim(), "UTF-8")
@@ -74,7 +88,7 @@ class PriceApiClient(
             try {
                 connection.connectTimeout = 18_000
                 connection.readTimeout = 18_000
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.3")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.4")
                 connection.setRequestProperty("Accept", "application/json")
                 val status = connection.responseCode
                 if (status != 200) {

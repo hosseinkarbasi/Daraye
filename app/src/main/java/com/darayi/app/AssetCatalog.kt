@@ -87,16 +87,47 @@ object AssetCatalog {
 
     fun localizeMarketAssets(assets: List<AssetOption>): List<AssetOption> = assets.mapNotNull { asset ->
         if (asset.category != AssetCategory.CURRENCY) return@mapNotNull asset
-        val currency = try { Currency.getInstance(asset.key) } catch (_: IllegalArgumentException) { return@mapNotNull null }
-        val name = when (asset.key) {
-            "USD" -> "دلار آمریکا"
-            "EUR" -> "یورو"
-            "GBP" -> "پوند"
-            "AED" -> "درهم"
-            else -> currency.getDisplayName(Locale("fa"))
-        }
-        val measure = if (asset.key == "USD") "دلار" else name
-        asset.copy(name = name, measure = measure, details = "${asset.key} ${currency.getDisplayName(Locale.ENGLISH)}")
+        if (asset.key !in FiatCurrencies.codes) return@mapNotNull null
+        val currency = Currency.getInstance(asset.key)
+        asset.copy(name = FiatCurrencies.name(asset.key), measure = FiatCurrencies.measure(asset.key),
+            details = "${asset.key} ${currency.getDisplayName(Locale.ENGLISH)}")
+    }.sortedWith(compareBy<AssetOption> { if (it.category == AssetCategory.CURRENCY) 0 else 1 }
+        .thenBy { if (it.category == AssetCategory.CURRENCY) FiatCurrencies.priority(it.key) else 0 })
+
+    fun crypto(raw: String): List<AssetOption> {
+        val root = JSONObject(raw)
+        require(root.optString("status") == "ok")
+        val coins = root.getJSONArray("coins")
+        val familiar = mapOf("BTC" to "بیت‌کوین", "ETH" to "اتریوم", "USDT" to "تتر", "SOL" to "سولانا",
+            "DOGE" to "دوج‌کوین", "SHIB" to "شیبا اینو", "PEPE" to "پپه", "BTT" to "بیت‌تورنت",
+            "BABYDOGE" to "بیبی دوج", "FLOKI" to "فلوکی", "BONK" to "بونک", "XRP" to "ریپل",
+            "ADA" to "کاردانو", "TRX" to "ترون", "TON" to "تون کوین", "BNB" to "بایننس کوین",
+            "LTC" to "لایت‌کوین", "BCH" to "بیت‌کوین کش", "AVAX" to "آوالانچ", "DOT" to "پولکادات",
+            "LINK" to "چین‌لینک", "XLM" to "استلار", "XMR" to "مونرو", "ETC" to "اتریوم کلاسیک")
+        val result = (0 until coins.length()).mapNotNull { i ->
+            val row = coins.optJSONObject(i) ?: return@mapNotNull null
+            val ticker = row.optString("coin")
+            if (ticker in setOf("rls", "irt", "usd")) return@mapNotNull null
+            val asset = CryptoSymbols.resolve(ticker) ?: return@mapNotNull null
+            val name = familiar[asset.key] ?: row.optString("name").ifBlank { asset.key }
+            AssetOption(asset.key, name, AssetCategory.CRYPTO, "عدد", "${asset.key} ${row.optString("name")}")
+        }.distinctBy { it.key }
+        require(result.isNotEmpty())
+        return result.sortedWith(compareBy<AssetOption> { familiar.keys.indexOf(it.key).takeIf { n -> n >= 0 } ?: familiar.size }.thenBy { it.key })
+    }
+
+    fun certificates(raw: String): List<AssetOption> {
+        val rows = certificateRows(raw)
+        val assets = (0 until rows.length()).mapNotNull { i ->
+            val row = rows.optJSONObject(i) ?: return@mapNotNull null
+            val code = row.optString("contract_code").trim()
+            if (code.isBlank()) return@mapNotNull null
+            val description = row.optString("contract_description")
+            AssetOption("IME_${symbol(code)}", "گواهی ${row.optString("commodity").ifBlank { code }}",
+                AssetCategory.STOCKS, "گواهی", "$description · $code")
+        }.distinctBy { it.key }
+        require(assets.isNotEmpty())
+        return assets
     }
 
     fun additionsFromQuotes(quotes: Map<String, Quote>): List<AssetOption> = quotes.mapNotNull { (key, quote) ->

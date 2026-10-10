@@ -71,10 +71,34 @@ class AssetCatalogTest {
         assertTrue(stocks.size > 1000)
         assertEquals("غمهرا", AssetCatalog.search(stocks, AssetCategory.STOCKS, "غمهر").first().key)
         val market = AssetCatalog.localizeMarketAssets(AssetCatalog.decode(File(directory, "market_catalog.json").readText()))
-        val all = stocks + market + AssetCatalog.physicalGold
+        val crypto = AssetCatalog.crypto(File(directory, "crypto_catalog.json").readText())
+        val certificates = AssetCatalog.certificates(File(directory, "certificate_catalog.json").readText())
+        val all = stocks + market + crypto + certificates + AssetCatalog.physicalGold
         assertEquals(all.size, all.distinctBy { it.category to it.key }.size)
         assertTrue(all.all { it.measure.isNotBlank() && it.key.isNotBlank() })
-        assertTrue(market.any { it.key == "BTC" && it.name == "بیت‌کوین" })
+        assertTrue(crypto.size > 300)
+        assertTrue(crypto.any { it.key == "BTC" && it.name == "بیت‌کوین" })
+        assertTrue(crypto.any { it.key == "SHIB" })
+        assertTrue(certificates.any { it.key == "IME_SILVERBAR" && it.category == AssetCategory.STOCKS && it.measure == "گواهی" })
+        assertTrue(certificates.any { it.key == "IME_COPPERCTHD" })
         assertTrue(market.any { it.key == "USD" && it.measure == "دلار" })
+        assertTrue(market.any { it.key == "IQD" && it.name == "دینار عراق" })
+        assertEquals(listOf("USD", "EUR", "GBP", "IQD", "AED"), market.take(5).map { it.key })
+        assertTrue(market.none { it.key in setOf("NIM", "ROB", "SOL", "XAU", "XAG", "CLF", "XDR") })
+    }
+
+    @Test fun cashCatalogRejectsCryptoCoinSymbolsMetalAndFundCurrencyCodes() {
+        val keys = listOf("USD", "EUR", "IQD", "BTC", "SOL", "NIM", "ROB", "XAU", "XAG", "CLF", "XDR", "XXX", "BYR")
+        val cash = AssetCatalog.localizeMarketAssets(keys.map { AssetOption(it, it, AssetCategory.CURRENCY, it) })
+        assertEquals(setOf("USD", "EUR", "IQD"), cash.map { it.key }.toSet())
+        assertEquals("دینار", cash.single { it.key == "IQD" }.measure)
+    }
+
+    @Test fun cryptoCatalogIncludesScaledSymbolsAndUnpricedCoinsWithoutFiatEntries() {
+        val assets = AssetCatalog.crypto("""{"status":"ok","coins":[{"coin":"1k_shib","name":"1000SHIB","scale":"1000"},{"coin":"usdt","name":"Tether"},{"coin":"newcoin","name":"New Coin"},{"coin":"rls","name":"Rial"}]}""")
+        assertEquals(setOf("SHIB", "USDT", "NEWCOIN"), assets.map { it.key }.toSet())
+        assertTrue(assets.all { it.category == AssetCategory.CRYPTO && it.measure == "عدد" })
+        assertEquals("SHIB", AssetCatalog.search(assets, AssetCategory.CRYPTO, "شیبا").single().key)
+        assertEquals("NEWCOIN", AssetCatalog.search(assets, AssetCategory.CRYPTO, "newcoin").single().key)
     }
 }

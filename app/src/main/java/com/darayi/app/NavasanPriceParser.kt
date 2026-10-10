@@ -3,7 +3,6 @@ package com.darayi.app
 import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.Currency
 import java.util.Locale
 
 object NavasanPriceParser {
@@ -16,10 +15,7 @@ object NavasanPriceParser {
         "nim" to ("IR_COIN_HALF" to BigDecimal(1000)),
         "rob" to ("IR_COIN_QUARTER" to BigDecimal(1000))
     )
-    private val currencies = Currency.getAvailableCurrencies()
-        .map { it.currencyCode.lowercase(Locale.ROOT) }
-        .filterNot { it in setOf("xau", "xag", "xpt", "xpd", "xxx", "xts") }
-        .toSet()
+    private val currencies = FiatCurrencies.codes.map { it.lowercase(Locale.ROOT) }.toSet()
 
     fun latest(raw: String): Map<String, Quote> {
         val root = JSONObject(raw)
