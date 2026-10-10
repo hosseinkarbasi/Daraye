@@ -9,7 +9,21 @@ class PortfolioTest {
   val legacy="""[{"name":"رمپنا","key":"رمپنا","qty":"7835","measure":"سهم","type":"بورس ایران","manual":false,"price":"0","unit":"تومان"},{"name":"پس‌انداز","key":"","qty":"125.75","measure":"دلار","type":"سایر دارایی‌ها","manual":true,"price":"1","unit":"دلار"}]"""
   val items=LegacyCodec.holdings(legacy)
   assertEquals("legacy-0",items[0].id);assertEquals(n("7835"),items[0].qty);assertEquals("رمپنا",items[0].key);assertTrue(items[1].manual)
+  assertEquals(AssetCategory.STOCKS,items[0].type);assertEquals(AssetCategory.OTHER,items[1].type)
   assertEquals(items,LegacyCodec.holdings(LegacyCodec.encode(items)))
+ }
+ @Test fun oldPhysicalGoldKeepsIdentityQuantityAndManualPrice(){
+  val old="""[{"id":"saved-gold","name":"طلای ۱۸ عیار","key":"IR_GOLD_18K","qty":"2.5","measure":"گرم","type":"طلا و سکه","manual":true,"price":"10000000.5","unit":"تومان"}]"""
+  val h=LegacyCodec.holdings(old).single()
+  assertEquals(AssetCategory.PHYSICAL_GOLD,h.type);assertEquals("saved-gold",h.id)
+  assertEquals(n("2.5"),h.qty);assertEquals(n("10000000.5"),h.price);assertTrue(h.manual)
+  assertEquals(listOf(h),LegacyCodec.holdings(LegacyCodec.encode(listOf(h))))
+ }
+ @Test fun missingCategoryDefaultsToOtherAndFundsSurviveRoundTrip(){
+  val missing=LegacyCodec.holdings("""[{"name":"قدیمی","key":"","qty":"1","manual":true,"price":"10"}]""").single()
+  assertEquals(AssetCategory.OTHER,missing.type)
+  val fund=holding("عیار","100",AssetCategory.METAL_FUNDS)
+  assertEquals(listOf(fund),LegacyCodec.holdings(LegacyCodec.encode(listOf(fund))))
  }
  @Test fun mixedPortfolioSortedAndSixPercentShare(){
   val holdings=listOf(holding("missing","1"),holding("BTC","0.002"),holding("gold","10",categories[0]),holding("stock","20000",categories[2]))

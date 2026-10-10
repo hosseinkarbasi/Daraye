@@ -44,11 +44,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.LifecycleStartEffect
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 private val Mint=Color(0xFF75E0B8)
-private val palette=listOf(Color(0xFFEAC76E),Color(0xFF8FC9FF),Mint,Color(0xFFC1AAFF),Color(0xFFB7C3D7))
+private val palette=listOf(Color(0xFFEAC76E),Color(0xFF8FC9FF),Mint,Color(0xFFC1AAFF),Color(0xFFFFB58A),Color(0xFFB7C3D7))
 private val colors=darkColorScheme(primary=Mint,onPrimary=Color(0xFF003828),primaryContainer=Color(0xFF175443),secondary=Color(0xFFB8CCC2),tertiary=Color(0xFFC1AAFF),background=Color(0xFF0C1424),surface=Color(0xFF111D30),surfaceContainer=Color(0xFF18263B),surfaceContainerHigh=Color(0xFF233149),onSurface=Color(0xFFF1F4FB),onSurfaceVariant=Color(0xFFB7C3D2))
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge();setContent { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl){MaterialExpressiveTheme(colorScheme=colors){PortfolioApp()}} }}}
 
@@ -56,14 +57,18 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
  var editorId by rememberSaveable { mutableStateOf<String?>(null) }
  var showSettings by rememberSaveable { mutableStateOf(false) }
  val snackbar=remember { SnackbarHostState() }
- LaunchedEffect(vm.message){vm.message?.let { snackbar.showSnackbar(it);vm.message=null }}
+ LifecycleStartEffect(vm){
+  vm.refresh(automatic=true)
+  onStopOrDispose { }
+ }
+ LaunchedEffect(vm.message){vm.message?.let { snackbar.showSnackbar(it,withDismissAction=true,duration=SnackbarDuration.Long);vm.message=null }}
  val fx=vm.fx
  val rows=remember(vm.holdings,vm.quotes,fx){valued(vm.holdings,vm.quotes,fx)}
  val total=rows.mapNotNull { it.toman }.fold(zero,BigDecimal::add)
  val unknown=rows.count { it.toman==null }
  Scaffold(
   containerColor=MaterialTheme.colorScheme.background,
-  topBar={CenterAlignedTopAppBar(title={Text("دارایی من",style=MaterialTheme.typography.titleMedium)},navigationIcon={IconButton(onClick={showSettings=true}){Icon(Icons.Default.Settings,"تنظیمات")}},actions={IconButton(onClick=vm::refresh,enabled=!vm.busy){if(vm.busy)CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=2.dp)else Icon(Icons.Default.Refresh,"دریافت قیمت روز")}},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background))},
+  topBar={CenterAlignedTopAppBar(title={Text("دارایی من",style=MaterialTheme.typography.titleMedium)},navigationIcon={IconButton(onClick={showSettings=true}){Icon(Icons.Default.Settings,"تنظیمات")}},actions={IconButton(onClick={vm.refresh()},enabled=!vm.busy){if(vm.busy)CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=2.dp)else Icon(Icons.Default.Refresh,"دریافت قیمت روز")}},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background))},
   bottomBar={Surface(color=MaterialTheme.colorScheme.background){Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(top=10.dp,bottom=14.dp),contentAlignment=Alignment.Center){Button(onClick={editorId="new"},enabled=!vm.loadFailed,modifier=Modifier.height(60.dp).widthIn(min=228.dp),shapes=ButtonDefaults.shapes(),contentPadding=PaddingValues(horizontal=28.dp)){Icon(Icons.Default.Add,null);Spacer(Modifier.width(10.dp));Text("افزودن دارایی",style=MaterialTheme.typography.titleMedium)}}}},
   snackbarHost={SnackbarHost(snackbar)}
  ){padding->
@@ -78,6 +83,17 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
     if(unknown>0)Text("جمع ناقص · $unknown دارایی بدون قیمت یا نرخ تبدیل",fontSize=11.sp,color=palette[0],textAlign=TextAlign.Center)
     Text(if(fx>zero)"هر دلار ${money(fx)} تومان · ${vm.quotes["USD"]?.stamp?:"نرخ دستی"}" else "نرخ دلار برای تبدیل موجود نیست",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,textAlign=TextAlign.Center)
    }}
+   vm.refreshError?.let { error ->
+    item {
+     Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)) {
+      Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+       Text("قیمت‌ها کامل به‌روزرسانی نشدند",style=MaterialTheme.typography.titleSmall)
+       Text(error,style=MaterialTheme.typography.bodySmall)
+       TextButton(onClick={vm.refresh()},enabled=!vm.busy){Text("تلاش دوباره")}
+      }
+     }
+    }
+   }
    item { Card(shape=RoundedCornerShape(28.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainer)){
     Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
      Text("ترکیب دارایی‌ها",style=MaterialTheme.typography.titleMedium)
@@ -86,7 +102,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
       val percent=share(value,total)
       val fraction by animateFloatAsState((percent.toFloat()/100f).coerceIn(0f,1f),label="allocation")
       Column(verticalArrangement=Arrangement.spacedBy(7.dp)){
-       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(category,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(if(total>zero)format(percent)+"٪" else "—",fontSize=12.sp,color=palette[index])}
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){Text(category,modifier=Modifier.weight(1f),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(if(total>zero)format(percent)+"٪" else "—",fontSize=12.sp,color=palette[index])}
        Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(palette[index].copy(alpha=.13f)).semantics { contentDescription="$category، ${format(percent)} درصد" }){Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(CircleShape).background(palette[index]))}
       }
      }
@@ -107,7 +123,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
     AssetLogo(h)
     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
-     Text(h.name,style=MaterialTheme.typography.titleSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
+     Text(holdingTitle(h),style=MaterialTheme.typography.titleSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
      Text(if(change==null)"۲۴ ساعت: —" else "${if(change>zero)"+" else ""}${format(change.setScale(2,RoundingMode.HALF_UP))}٪ · ${q?.period ?: "روزانه"}",fontSize=10.sp,color=if(change==null||change.compareTo(zero)==0)MaterialTheme.colorScheme.onSurfaceVariant else if(change>zero)Mint else Color(0xFFFF93A2))
     }
     Column(horizontalAlignment=Alignment.End,modifier=Modifier.widthIn(max=132.dp)){
@@ -115,20 +131,19 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
      Text("تومان",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
    }
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("${format(h.qty)} ${h.measure}",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);if(q?.unit=="دلار")Text("${format(q.price*h.qty)} دلار",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-   q?.let { Text((if(h.manual)"" else "آخرین داده: ")+it.stamp,fontSize=9.sp,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+   if(q?.unit=="دلار")Text("${format(q.price*h.qty)} دلار",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }
 @Composable fun AssetLogo(h:Holding){val category=categories.indexOf(h.type).coerceAtLeast(0);val color=if(h.key=="BTC")Color(0xFFF7931A)else palette[category]
  Box(Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha=.15f)),contentAlignment=Alignment.Center){
   if(h.key=="ETH")Canvas(Modifier.size(30.dp)){val w=size.width;val he=size.height;val p=Path().apply{moveTo(w*.5f,0f);lineTo(w*.83f,he*.53f);lineTo(w*.5f,he*.69f);lineTo(w*.17f,he*.53f);close();moveTo(w*.17f,he*.6f);lineTo(w*.5f,he);lineTo(w*.83f,he*.6f);lineTo(w*.5f,he*.77f);close()};drawPath(p,color)}
-  else Text(when(h.key){"BTC"->"₿";"USD"->"$";"EUR"->"€";"GBP"->"£";"USDT"->"₮";else->when(category){0->"Au";2->"▥";else->h.key.ifBlank { h.name }.take(3)}},fontSize=if(h.key.length>3)17.sp else 24.sp,fontWeight=FontWeight.Bold,color=color)
+  else Text(when(h.key){"BTC"->"₿";"USD"->"$";"EUR"->"€";"GBP"->"£";"USDT"->"₮";else->when(category){0->"Au";2,4->"▥";else->h.key.ifBlank { h.name }.take(3)}},fontSize=if(h.key.length>3)17.sp else 24.sp,fontWeight=FontWeight.Bold,color=color)
  }
 }
 
 private val presets=mapOf(
- "طلا و سکه" to listOf("طلای ۱۸ عیار" to "IR_GOLD_18K","طلای ۲۴ عیار" to "IR_GOLD_24K","سکه امامی" to "IR_COIN_EMAMI","سکه بهار آزادی" to "IR_COIN_BAHAR","نیم سکه" to "IR_COIN_HALF","ربع سکه" to "IR_COIN_QUARTER"),
+ AssetCategory.PHYSICAL_GOLD to listOf("طلای ۱۸ عیار" to "IR_GOLD_18K","طلای ۲۴ عیار" to "IR_GOLD_24K","سکه امامی" to "IR_COIN_EMAMI","سکه بهار آزادی" to "IR_COIN_BAHAR","نیم سکه" to "IR_COIN_HALF","ربع سکه" to "IR_COIN_QUARTER"),
  "ارز" to listOf("دلار آمریکا" to "USD","یورو" to "EUR","درهم" to "AED","پوند" to "GBP"),
  "رمزارز" to listOf("بیت‌کوین" to "BTC","اتریوم" to "ETH","تتر" to "USDT","سولانا" to "SOL","دوج‌کوین" to "DOGE")
 )
@@ -152,11 +167,11 @@ private val presets=mapOf(
  ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
   Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(if(old==null)"افزودن دارایی" else "ویرایش دارایی",style=MaterialTheme.typography.headlineSmall,modifier=Modifier.weight(1f));IconButton(onClick=onDismiss){Icon(Icons.Default.Close,"بستن")}}
-   Choice("نوع دارایی",category,categories){category=it}
+   Choice("نوع دارایی",category,categories){category=it;if(usesStockPrices(it))measure=if(it==AssetCategory.METAL_FUNDS)"واحد" else "سهم"}
    val options=presets[category].orEmpty()
    if(options.isNotEmpty())Choice("انتخاب سریع",options.firstOrNull { it.second==key }?.first?:"انتخاب دارایی",options.map { it.first }){selected->val p=options.first { it.first==selected };name=p.first;key=p.second;if(key=="IR_GOLD_24K")manual=true;measure=if(category==categories[0]&&key.startsWith("IR_GOLD"))"گرم" else if(category==categories[1])name else "عدد"}
    OutlinedTextField(name,{name=it},label={Text("نام دارایی")},singleLine=true,modifier=Modifier.fillMaxWidth())
-   if(!manual)OutlinedTextField(key,{key=it},label={Text("نماد منبع")},supportingText={Text(if(category==categories[2])"مثل رمپنا؛ قیمت آخرین معامله استفاده می‌شود" else "نماد با انتخاب سریع پر می‌شود")},singleLine=true,modifier=Modifier.fillMaxWidth())
+   if(!manual)OutlinedTextField(key,{key=it},label={Text("نماد منبع")},supportingText={Text(when{category==AssetCategory.METAL_FUNDS->"نماد بورسی صندوق را وارد کن؛ قیمت آخرین معامله استفاده می‌شود";usesStockPrices(category)->"مثل رمپنا؛ قیمت آخرین معامله استفاده می‌شود";else->"نماد با انتخاب سریع پر می‌شود"})},singleLine=true,modifier=Modifier.fillMaxWidth())
    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
     OutlinedTextField(qty,{qty=it},label={Text("مقدار / تعداد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.weight(1f))
     OutlinedTextField(measure,{measure=it},label={Text("واحد مقدار")},singleLine=true,modifier=Modifier.weight(1f))
@@ -177,7 +192,7 @@ private val presets=mapOf(
  ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
   Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=28.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
    Text("تنظیمات",style=MaterialTheme.typography.headlineSmall)
-   OutlinedTextField(key,{key=it},label={Text("کلید BRSAPI برای بورس")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
+   OutlinedTextField(key,{key=it},label={Text("کلید BRSAPI برای سهام و صندوق‌ها")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
    OutlinedTextField(navKey,{navKey=it},label={Text("کلید نوسان برای ارز، طلا و سکه")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
    Text("قیمت رمزارزها از بازار ریالی نوبیتکس دریافت و به تومان تبدیل می‌شود؛ کلید لازم نیست.",style=MaterialTheme.typography.bodySmall)
    OutlinedTextField(fx,{fx=it;error=false},label={Text("نرخ دستی دلار به تومان")},supportingText={Text("اختیاری؛ نرخ دریافتی دلار اولویت دارد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,isError=error,modifier=Modifier.fillMaxWidth())
@@ -185,7 +200,7 @@ private val presets=mapOf(
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://brsapi.ir")))}){Text("دریافت کلید بورس از BRSAPI")}
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.navasan.tech/api/")))}){Text("دریافت کلید ارز و طلا از نوسان")}
    Button(onClick={val rate=number(fx);if(fx.isNotBlank()&&(rate==null||rate<=zero))error=true else onSave(key,navKey,rate?.toPlainString()?:"")},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ تنظیمات")}
-   Text("دارایی من · نسخهٔ ۲.۱",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   Text("دارایی من · نسخهٔ ۲.۲",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }

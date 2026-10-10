@@ -1,7 +1,9 @@
-# Darayi 2.1 test APK
+# دارایی من ۲.۲
 
-This signed development APK connects BRSAPI stock prices, public Nobitex crypto prices and Navasan gold, coin and currency prices. Enter personal BRSAPI and Navasan keys in the Android app settings. No API keys are embedded.
+این نسخه هنگام باز شدن اپ و برگشتن از پس‌زمینه قیمت‌ها را خودکار دریافت می‌کند. شکست دریافت در اعلان و پیام ثابت با دکمهٔ تلاش دوباره نمایش داده می‌شود و قیمت‌های قبلی حفظ می‌شوند.
 
-Build and all 34 unit tests passed; Android lint reported no blocking errors. The APK signature matches the development keystore included in this repository. Minimum Android version: 8 (API 26). On-device UI testing has not been performed.
+در کارت دارایی، مقدار قبل از نام قرار دارد و ردیف آخرین داده حذف شده است. گروه‌های طلا (انواع فیزیکی)، سهام و صندوق طلا و نقره و مس در ترکیب و فرم افزودن دارایی قرار دارند. قیمت سهام و صندوق‌ها از یک درخواست مشترک به BRSAPI خوانده می‌شود. نام گروه‌های قدیمی هنگام خواندن داده مهاجرت می‌کند و مقدار و قیمت دستی حفظ می‌شوند.
 
-The APK and its SHA-256 checksum are in this directory. Install over an existing compatible version to retain portfolio data.
+ساخت APK، ۳۹ تست واحد و بررسی Android lint موفق بودند. فایل با همان کلید توسعهٔ پروژه امضا شده است؛ شناسهٔ اپ com.darayi.app و کد نسخه ۵ است. حداقل اندروید ۸. رابط روی گوشی واقعی یا شبیه‌ساز تست نشده است.
+
+APK و فایل SHA-256 در همین پوشه‌اند. روی نسخهٔ قبلی نصب کنید و اپ را حذف نکنید تا اطلاعات حفظ شود. کلیدهای شخصی بورس و نوسان داخل APK قرار ندارند و باید در تنظیمات اپ وارد شوند؛ قیمت نوبیتکس کلید نمی‌خواهد.
