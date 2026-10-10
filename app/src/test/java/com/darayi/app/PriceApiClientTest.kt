@@ -70,6 +70,24 @@ class PriceApiClientTest {
         assertEquals(0, java.math.BigDecimal("2200").compareTo(client.stocks("test")["رمپنا"]!!.price))
     }
 
+    @Test fun stockPricesAndAssetCatalogAreReadFromOneResponse() {
+        var calls = 0
+        val client = PriceApiClient { url ->
+            calls++
+            Response(url, body="""[{"l18":"غمهرا","l30":"تولیدی مهرام","pl":1000},{"l18":"عیار","l30":"صندوق طلای عیار","cs":"صندوق","pl":2000}]""")
+        }
+        val snapshot = client.stockMarket("test")
+        assertEquals(1, calls)
+        assertEquals("سهم", snapshot.assets.single { it.key == "غمهرا" }.measure)
+        assertEquals("واحد", snapshot.assets.single { it.key == "عیار" }.measure)
+        assertEquals(snapshot.quotes.keys, snapshot.assets.map { it.key }.toSet())
+    }
+
+    @Test fun catalogCanBeFetchedWithoutAnyHoldingsOrPositiveCurrentPrices() {
+        val client = PriceApiClient { Response(it, body="""[{"l18":"غمهرا","l30":"تولیدی مهرام","pl":0}]""") }
+        assertEquals("غمهرا", client.stockAssets("test").single().key)
+    }
+
     @Test fun missingKeyDoesNotMakeNetworkRequest() {
         val client = PriceApiClient { throw AssertionError("Network should not be used") }
         expectFailure(PriceApiFailure.MISSING_KEY) { client.stocks(" ") }

@@ -34,10 +34,19 @@ class PriceApiClient(
         it.openConnection() as HttpsURLConnection
     }
 ) {
-    fun stocks(key: String): Map<String, Quote> {
+    fun stocks(key: String): Map<String, Quote> = stockMarket(key).quotes
+
+    fun stockMarket(key: String): StockMarketData {
+        val raw = stockResponse(key)
+        return decode(raw) { StockMarketData(PriceParser.stocks(it), AssetCatalog.stocks(it)) }
+    }
+
+    fun stockAssets(key: String): List<AssetOption> = decode(stockResponse(key), AssetCatalog::stocks)
+
+    private fun stockResponse(key: String): String {
         if (key.isBlank()) throw PriceApiException(PriceApiFailure.MISSING_KEY)
         val encoded = URLEncoder.encode(key.trim(), "UTF-8")
-        return decode(request("https://api.brsapi.ir/Tsetmc/AllSymbols.php?key=$encoded&type=1"), PriceParser::stocks)
+        return request("https://api.brsapi.ir/Tsetmc/AllSymbols.php?key=$encoded&type=1")
     }
 
     fun crypto(): Map<String, Quote> = decode(
@@ -50,7 +59,7 @@ class PriceApiClient(
         return decode(request("https://api.navasan.tech/latest/?api_key=$encoded"), NavasanPriceParser::latest)
     }
 
-    private fun decode(raw: String, parser: (String) -> Map<String, Quote>): Map<String, Quote> {
+    private fun <T> decode(raw: String, parser: (String) -> T): T {
         return try {
             parser(raw)
         } catch (_: Exception) {
@@ -65,7 +74,7 @@ class PriceApiClient(
             try {
                 connection.connectTimeout = 18_000
                 connection.readTimeout = 18_000
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.2")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.3")
                 connection.setRequestProperty("Accept", "application/json")
                 val status = connection.responseCode
                 if (status != 200) {

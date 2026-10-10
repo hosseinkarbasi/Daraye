@@ -114,7 +114,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    items(rows,key={it.holding.id}){r->HoldingCard(r){editorId=r.holding.id}}
   }
  }
- if(editorId!=null){val h=vm.holdings.find { it.id==editorId };HoldingEditor(h,onDismiss={editorId=null},onSave={vm.save(it);editorId=null},onDelete={vm.remove(it);editorId=null})}
+ if(editorId!=null){val h=vm.holdings.find { it.id==editorId };HoldingEditor(h,vm.assetCatalog,vm.catalogBusy,vm.catalogError,{category,force->vm.loadAssetCatalog(category,force)},onDismiss={editorId=null},onSave={vm.save(it);editorId=null},onDelete={vm.remove(it);editorId=null})}
  if(showSettings)SettingsDialog(vm.apiKey,vm.navasanKey,vm.manualFx,{showSettings=false}){key,navKey,rate->vm.settings(key,navKey,rate);showSettings=false}
 }
 @Composable fun HoldingCard(row:Valued,onClick:()->Unit){val h=row.holding;val q=row.quote;val change=q?.change
@@ -124,7 +124,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
     AssetLogo(h)
     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
      Text(holdingTitle(h),style=MaterialTheme.typography.titleSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
-     Text(if(change==null)"۲۴ ساعت: —" else "${if(change>zero)"+" else ""}${format(change.setScale(2,RoundingMode.HALF_UP))}٪ · ${q?.period ?: "روزانه"}",fontSize=10.sp,color=if(change==null||change.compareTo(zero)==0)MaterialTheme.colorScheme.onSurfaceVariant else if(change>zero)Mint else Color(0xFFFF93A2))
+     Text(if(change==null)"—" else "${if(change>zero)"+" else ""}${format(change.setScale(2,RoundingMode.HALF_UP))}٪",fontSize=10.sp,color=if(change==null||change.compareTo(zero)==0)MaterialTheme.colorScheme.onSurfaceVariant else if(change>zero)Mint else Color(0xFFFF93A2))
     }
     Column(horizontalAlignment=Alignment.End,modifier=Modifier.widthIn(max=132.dp)){
      Text(row.toman?.let(::money)?:"نامشخص",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,textAlign=TextAlign.End)
@@ -142,46 +142,59 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
  }
 }
 
-private val presets=mapOf(
- AssetCategory.PHYSICAL_GOLD to listOf("طلای ۱۸ عیار" to "IR_GOLD_18K","طلای ۲۴ عیار" to "IR_GOLD_24K","سکه امامی" to "IR_COIN_EMAMI","سکه بهار آزادی" to "IR_COIN_BAHAR","نیم سکه" to "IR_COIN_HALF","ربع سکه" to "IR_COIN_QUARTER"),
- "ارز" to listOf("دلار آمریکا" to "USD","یورو" to "EUR","درهم" to "AED","پوند" to "GBP"),
- "رمزارز" to listOf("بیت‌کوین" to "BTC","اتریوم" to "ETH","تتر" to "USDT","سولانا" to "SOL","دوج‌کوین" to "DOGE")
-)
 @Composable private fun Choice(label:String,value:String,choices:List<String>,select:(String)->Unit){var open by remember { mutableStateOf(false) }
  ExposedDropdownMenuBox(expanded=open,onExpandedChange={open=it}){
-  OutlinedTextField(value=value,onValueChange={},readOnly=true,label={Text(label)},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(open)},modifier=Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable))
+  OutlinedTextField(value=value,onValueChange={},readOnly=true,label={Text(label)},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(open)},modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable))
   ExposedDropdownMenu(expanded=open,onDismissRequest={open=false}){choices.forEach { option->DropdownMenuItem(text={Text(option)},onClick={select(option);open=false})}}
  }
 }
-@Composable fun HoldingEditor(old:Holding?,onDismiss:()->Unit,onSave:(Holding)->Unit,onDelete:(Holding)->Unit){
+@Composable private fun AssetSearch(value:String,category:String,assets:List<AssetOption>,onQuery:(String)->Unit,onSelect:(AssetOption)->Unit){
+ var expanded by remember(category) { mutableStateOf(false) }
+ val results=remember(assets,category,value){AssetCatalog.search(assets,category,value)}
+ ExposedDropdownMenuBox(expanded=expanded&&results.isNotEmpty(),onExpandedChange={expanded=it}){
+  OutlinedTextField(value=value,onValueChange={onQuery(it);expanded=true},label={Text("نام دارایی")},supportingText={Text(if(results.isEmpty()&&value.isNotBlank())"دارایی پیدا نشد؛ نام را دقیق‌تر جست‌وجو کن." else "دارایی را جست‌وجو و از نتایج انتخاب کن")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)},singleLine=true,modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable))
+  ExposedDropdownMenu(expanded=expanded&&results.isNotEmpty(),onDismissRequest={expanded=false},modifier=Modifier.heightIn(max=280.dp)){
+   results.forEach { asset ->
+    DropdownMenuItem(text={Column{Text(asset.name);if(asset.details.isNotBlank()&&asset.details!=asset.name)Text(asset.details,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}},onClick={onSelect(asset);expanded=false})
+   }
+  }
+ }
+}
+@Composable fun HoldingEditor(old:Holding?,assets:List<AssetOption>,catalogBusy:Boolean,catalogError:String?,loadCatalog:(String,Boolean)->Unit,onDismiss:()->Unit,onSave:(Holding)->Unit,onDelete:(Holding)->Unit){
  var name by rememberSaveable(old?.id){mutableStateOf(old?.name?:"")}
  var key by rememberSaveable(old?.id){mutableStateOf(old?.key?:"")}
  var qty by rememberSaveable(old?.id){mutableStateOf(old?.qty?.toPlainString()?:"")}
  var category by rememberSaveable(old?.id){mutableStateOf(old?.type?:categories[0])}
- var measure by rememberSaveable(old?.id){mutableStateOf(old?.measure?:"گرم")}
+ var measure by rememberSaveable(old?.id){mutableStateOf(old?.measure?:"")}
  var manual by rememberSaveable(old?.id){mutableStateOf(old?.manual?:false)}
  var price by rememberSaveable(old?.id){mutableStateOf(old?.price?.takeIf { it>zero }?.toPlainString()?:"")}
  var unit by rememberSaveable(old?.id){mutableStateOf(old?.unit?:"تومان")}
  var error by rememberSaveable { mutableStateOf<String?>(null) }
  var deleteConfirm by remember { mutableStateOf(false) }
+ val selected=assets.firstOrNull { it.key==key&&(it.category==category||(usesStockPrices(it.category)&&usesStockPrices(category))) }
+ val actualMeasure=selected?.measure?:measure.ifBlank { "عدد" }
+ val useManual=manual||category==AssetCategory.OTHER||selected?.manualOnly==true
+ LaunchedEffect(category){loadCatalog(category,false)}
  ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
   Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(if(old==null)"افزودن دارایی" else "ویرایش دارایی",style=MaterialTheme.typography.headlineSmall,modifier=Modifier.weight(1f));IconButton(onClick=onDismiss){Icon(Icons.Default.Close,"بستن")}}
-   Choice("نوع دارایی",category,categories){category=it;if(usesStockPrices(it))measure=if(it==AssetCategory.METAL_FUNDS)"واحد" else "سهم"}
-   val options=presets[category].orEmpty()
-   if(options.isNotEmpty())Choice("انتخاب سریع",options.firstOrNull { it.second==key }?.first?:"انتخاب دارایی",options.map { it.first }){selected->val p=options.first { it.first==selected };name=p.first;key=p.second;if(key=="IR_GOLD_24K")manual=true;measure=if(category==categories[0]&&key.startsWith("IR_GOLD"))"گرم" else if(category==categories[1])name else "عدد"}
-   OutlinedTextField(name,{name=it},label={Text("نام دارایی")},singleLine=true,modifier=Modifier.fillMaxWidth())
-   if(!manual)OutlinedTextField(key,{key=it},label={Text("نماد منبع")},supportingText={Text(when{category==AssetCategory.METAL_FUNDS->"نماد بورسی صندوق را وارد کن؛ قیمت آخرین معامله استفاده می‌شود";usesStockPrices(category)->"مثل رمپنا؛ قیمت آخرین معامله استفاده می‌شود";else->"نماد با انتخاب سریع پر می‌شود"})},singleLine=true,modifier=Modifier.fillMaxWidth())
-   Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
-    OutlinedTextField(qty,{qty=it},label={Text("مقدار / تعداد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.weight(1f))
-    OutlinedTextField(measure,{measure=it},label={Text("واحد مقدار")},singleLine=true,modifier=Modifier.weight(1f))
+   Choice("نوع دارایی",category,categories){if(category!=it){category=it;name="";key="";measure="";manual=it==AssetCategory.OTHER;price="";unit="تومان";error=null}}
+   if(category==AssetCategory.OTHER){
+    OutlinedTextField(name,{name=it;error=null},label={Text("نام دارایی")},singleLine=true,modifier=Modifier.fillMaxWidth())
+   }else{
+    AssetSearch(name,category,assets,onQuery={name=it;key="";measure="";error=null},onSelect={asset->name=asset.name;key=asset.key;measure=asset.measure;manual=asset.manualOnly||(old?.manual==true&&old.key==asset.key);error=null})
    }
-   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("قیمت را دستی وارد می‌کنم",modifier=Modifier.weight(1f));Switch(manual,{manual=it})}
-   if(manual){Choice("واحد قیمت",unit,listOf("تومان","دلار")){unit=it};OutlinedTextField(price,{price=it},label={Text("قیمت هر واحد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
-   Text("طلا را بر حسب گرم ثبت کن. ارزش طلا بدون اجرت، مالیات و کارمزد محاسبه می‌شود.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   if(usesStockPrices(category)){
+    if(catalogBusy)Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp);Text("به‌روزرسانی فهرست دارایی‌ها…",fontSize=11.sp)}
+    catalogError?.let {Text(it,fontSize=11.sp,color=MaterialTheme.colorScheme.error);TextButton(onClick={loadCatalog(category,true)},enabled=!catalogBusy){Text("تلاش دوباره")}}
+   }
+   OutlinedTextField(qty,{qty=it},label={Text(if(key.isNotBlank()||category==AssetCategory.OTHER)"مقدار / تعداد ($actualMeasure)" else "مقدار / تعداد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
+   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("قیمت را دستی وارد می‌کنم",modifier=Modifier.weight(1f));Switch(useManual,{manual=it},enabled=category!=AssetCategory.OTHER&&selected?.manualOnly!=true)}
+   if(useManual){Choice("واحد قیمت",unit,listOf("تومان","دلار")){unit=it};OutlinedTextField(price,{price=it},label={Text("قیمت هر واحد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
+   if(category==AssetCategory.PHYSICAL_GOLD)Text("ارزش طلا بدون اجرت، مالیات و کارمزد محاسبه می‌شود.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
    if(key=="IR_GOLD_24K")Text("قیمت خودکار طلای ۲۴ عیار در این منبع موجود نیست؛ قیمت را دستی ثبت کن.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
    error?.let { Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp) }
-   Button(onClick={val q=number(qty);val p=if(manual)number(price) else zero;if(name.isBlank()||measure.isBlank()||q==null||q<=zero||(!manual&&key.isBlank())||p==null||(manual&&p<=zero)){error="نام، مقدار مثبت و مشخصات قیمت را کامل کن."}else{onSave(Holding(id=old?.id?:java.util.UUID.randomUUID().toString(),name=name.trim(),key=symbol(key),qty=q,measure=measure.trim(),type=category,manual=manual,price=p,unit=unit))}},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ دارایی")}
+   Button(onClick={val q=number(qty);val p=if(useManual)number(price) else zero;if(category!=AssetCategory.OTHER&&key.isBlank()){error="دارایی را از نتایج جست‌وجو انتخاب کن."}else if(name.isBlank()||q==null||q<=zero||p==null||(useManual&&p<=zero)){error="مقدار مثبت و مشخصات قیمت را کامل کن."}else{onSave(Holding(id=old?.id?:java.util.UUID.randomUUID().toString(),name=name.trim(),key=symbol(key),qty=q,measure=actualMeasure,type=category,manual=useManual,price=p,unit=unit))}},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ دارایی")}
    if(old!=null)TextButton(onClick={deleteConfirm=true},modifier=Modifier.fillMaxWidth()){Text("حذف دارایی",color=MaterialTheme.colorScheme.error)}
   }
  }
@@ -200,7 +213,7 @@ private val presets=mapOf(
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://brsapi.ir")))}){Text("دریافت کلید بورس از BRSAPI")}
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.navasan.tech/api/")))}){Text("دریافت کلید ارز و طلا از نوسان")}
    Button(onClick={val rate=number(fx);if(fx.isNotBlank()&&(rate==null||rate<=zero))error=true else onSave(key,navKey,rate?.toPlainString()?:"")},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ تنظیمات")}
-   Text("دارایی من · نسخهٔ ۲.۲",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   Text("دارایی من · نسخهٔ ۲.۳",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }

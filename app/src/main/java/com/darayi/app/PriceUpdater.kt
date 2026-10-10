@@ -1,6 +1,6 @@
 package com.darayi.app
 
-data class PriceUpdateResult(val quotes: Map<String, Quote>, val messages: List<String>, val errors: List<String>)
+data class PriceUpdateResult(val quotes: Map<String, Quote>, val messages: List<String>, val errors: List<String>, val stockAssets: List<AssetOption> = emptyList())
 
 class PriceUpdater(private val client: PriceApiClient = PriceApiClient()) {
     fun refresh(
@@ -13,6 +13,7 @@ class PriceUpdater(private val client: PriceApiClient = PriceApiClient()) {
         val updated = previous.toMutableMap()
         val messages = mutableListOf<String>()
         val errors = mutableListOf<String>()
+        var stockAssets = emptyList<AssetOption>()
         fun reportError(message: String) {
             messages += message
             errors += message
@@ -33,7 +34,9 @@ class PriceUpdater(private val client: PriceApiClient = PriceApiClient()) {
         val stocks = automatic.filter { usesStockPrices(it.type) }
         val crypto = automatic.filter { it.type == AssetCategory.CRYPTO }
         val market = automatic.filter { it.type == AssetCategory.PHYSICAL_GOLD || it.type == AssetCategory.CURRENCY }
-        if (stocks.isNotEmpty()) update("سهام و صندوق‌ها", stocks) { client.stocks(stockKey) }
+        if (stocks.isNotEmpty()) update("سهام و صندوق‌ها", stocks) {
+            client.stockMarket(stockKey).also { stockAssets = it.assets }.quotes
+        }
         if (crypto.isNotEmpty()) update("نوبیتکس", crypto) { client.crypto() }
         // A configured Navasan key also refreshes USD for the portfolio's dollar total.
         if (market.isNotEmpty() || (holdings.isNotEmpty() && navasanKey.isNotBlank())) {
@@ -43,6 +46,6 @@ class PriceUpdater(private val client: PriceApiClient = PriceApiClient()) {
             reportError("برای سایر دارایی‌ها قیمت دستی ثبت کن؛ منبع قیمت خودکار ندارند.")
         }
         if (messages.isEmpty()) messages += "دارایی با قیمت خودکار ثبت نشده است."
-        return PriceUpdateResult(updated.toMap(), messages, errors)
+        return PriceUpdateResult(updated.toMap(), messages, errors, stockAssets)
     }
 }
