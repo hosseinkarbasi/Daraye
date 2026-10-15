@@ -36,6 +36,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -49,9 +53,9 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 private val Mint=Color(0xFF75E0B8)
-private val palette=listOf(Color(0xFFEAC76E),Color(0xFF8FC9FF),Mint,Color(0xFFC1AAFF),Color(0xFFFFB58A),Color(0xFFB7C3D7))
+internal val palette=listOf(Color(0xFFEAC76E),Color(0xFF8FC9FF),Mint,Color(0xFFC1AAFF),Color(0xFFFFB58A),Color(0xFFB7C3D7))
 private val colors=darkColorScheme(primary=Mint,onPrimary=Color(0xFF003828),primaryContainer=Color(0xFF175443),secondary=Color(0xFFB8CCC2),tertiary=Color(0xFFC1AAFF),background=Color(0xFF0C1424),surface=Color(0xFF111D30),surfaceContainer=Color(0xFF18263B),surfaceContainerHigh=Color(0xFF233149),onSurface=Color(0xFFF1F4FB),onSurfaceVariant=Color(0xFFB7C3D2))
-class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge();setContent { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl){MaterialExpressiveTheme(colorScheme=colors){PortfolioApp()}} }}}
+class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge();setContent { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl){MaterialExpressiveTheme(colorScheme=colors,typography=DarayiTypography){PortfolioApp()}} }}}
 
 @Composable fun PortfolioApp(vm:PortfolioViewModel=viewModel()){
  var editorId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,7 +127,10 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
     AssetLogo(h)
     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
-     Text(holdingTitle(h),style=MaterialTheme.typography.titleSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
+     Text(buildAnnotatedString {
+      withStyle(SpanStyle(fontSize=12.sp,fontWeight=FontWeight.Normal,color=MaterialTheme.colorScheme.onSurfaceVariant)){append(format(h.qty));append(" ")}
+      append(holdingTitle(h).removePrefix("${format(h.qty)} "))
+     },style=MaterialTheme.typography.titleSmall.copy(fontSize=15.sp,lineHeight=25.sp),maxLines=3,overflow=TextOverflow.Ellipsis)
      Text(if(change==null)"—" else "${if(change>zero)"+" else ""}${format(change.setScale(2,RoundingMode.HALF_UP))}٪",fontSize=10.sp,color=if(change==null||change.compareTo(zero)==0)MaterialTheme.colorScheme.onSurfaceVariant else if(change>zero)Mint else Color(0xFFFF93A2))
     }
     Column(horizontalAlignment=Alignment.End,modifier=Modifier.widthIn(max=132.dp)){
@@ -142,73 +149,27 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
  }
 }
 
-@Composable private fun Choice(label:String,value:String,choices:List<String>,select:(String)->Unit){var open by remember { mutableStateOf(false) }
+@Composable internal fun Choice(label:String,value:String,choices:List<String>,select:(String)->Unit){var open by remember { mutableStateOf(false) }
  ExposedDropdownMenuBox(expanded=open,onExpandedChange={open=it}){
-  OutlinedTextField(value=value,onValueChange={},readOnly=true,label={Text(label)},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(open)},modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable))
+  OutlinedTextField(value=value,onValueChange={},readOnly=true,label={Text(label)},shape=RoundedCornerShape(18.dp),trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(open)},modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable))
   ExposedDropdownMenu(expanded=open,onDismissRequest={open=false}){choices.forEach { option->DropdownMenuItem(text={Text(option)},onClick={select(option);open=false})}}
  }
 }
-@Composable private fun AssetSearch(value:String,category:String,assets:List<AssetOption>,onQuery:(String)->Unit,onSelect:(AssetOption)->Unit){
+@Composable internal fun AssetSearch(value:String,category:String,assets:List<AssetOption>,onQuery:(String)->Unit,onSelect:(AssetOption)->Unit){
  var expanded by remember(category) { mutableStateOf(false) }
  var limit by remember(category,value){mutableIntStateOf(40)}
  val matches=remember(assets,category,value,limit){AssetCatalog.search(assets,category,value,limit+1)}
  val results=matches.take(limit)
  val count=remember(assets,category){assets.count{it.category==category}}
  ExposedDropdownMenuBox(expanded=expanded&&results.isNotEmpty(),onExpandedChange={expanded=it}){
-  OutlinedTextField(value=value,onValueChange={onQuery(it);expanded=true},label={Text("نام دارایی")},supportingText={Text(if(results.isEmpty()&&value.isNotBlank())"دارایی پیدا نشد؛ نام را دقیق‌تر جست‌وجو کن." else "$count دارایی؛ نام یا نماد را جست‌وجو کن")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)},singleLine=true,modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable))
+  OutlinedTextField(value=value,onValueChange={onQuery(it);expanded=true},label={Text("نام دارایی")},placeholder={Text("نام یا نماد را بنویس…")},leadingIcon={Icon(Icons.Default.Search,null)},shape=RoundedCornerShape(18.dp),supportingText={Text(if(results.isEmpty()&&value.isNotBlank())"دارایی پیدا نشد؛ نام را دقیق‌تر جست‌وجو کن." else "$count دارایی قابل جست‌وجو")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)},singleLine=true,modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable))
   ExposedDropdownMenu(expanded=expanded&&results.isNotEmpty(),onDismissRequest={expanded=false},modifier=Modifier.heightIn(max=280.dp)){
    results.forEach { asset ->
-    DropdownMenuItem(text={Column{Text(asset.name);if(asset.details.isNotBlank()&&asset.details!=asset.name)Text(asset.details,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}},onClick={onSelect(asset);expanded=false})
+    DropdownMenuItem(text={Column(verticalArrangement=Arrangement.spacedBy(4.dp)){Text(asset.name,style=MaterialTheme.typography.titleSmall);if(asset.details.isNotBlank()&&asset.details!=asset.name)Text(asset.details,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}},onClick={onSelect(asset);expanded=false})
    }
    if(matches.size>limit)DropdownMenuItem(text={Text("نمایش گزینه‌های بیشتر")},onClick={limit+=40})
   }
  }
-}
-@Composable fun HoldingEditor(old:Holding?,assets:List<AssetOption>,catalogBusy:Boolean,catalogError:String?,loadCatalog:(String,Boolean)->Unit,onDismiss:()->Unit,onSave:(Holding)->Unit,onDelete:(Holding)->Unit){
- var name by rememberSaveable(old?.id){mutableStateOf(old?.name?:"")}
- var key by rememberSaveable(old?.id){mutableStateOf(old?.key?:"")}
- var qty by rememberSaveable(old?.id){mutableStateOf(old?.qty?.let { if(isGoldWeight(old.key))it*BigDecimal(1000) else it }?.stripTrailingZeros()?.toPlainString()?:"")}
- var quantityIsMilligrams by rememberSaveable(old?.id){mutableStateOf(old?.key?.let(::isGoldWeight)?:false)}
- var category by rememberSaveable(old?.id){mutableStateOf(old?.type?:categories[0])}
- var measure by rememberSaveable(old?.id){mutableStateOf(old?.measure?:"")}
- var manual by rememberSaveable(old?.id){mutableStateOf(old?.manual?:false)}
- var price by rememberSaveable(old?.id){mutableStateOf(old?.price?.takeIf { it>zero }?.toPlainString()?:"")}
- var unit by rememberSaveable(old?.id){mutableStateOf(old?.unit?:"تومان")}
- var error by rememberSaveable { mutableStateOf<String?>(null) }
- var deleteConfirm by remember { mutableStateOf(false) }
- val selected=assets.firstOrNull { it.key==key&&(it.category==category||(usesStockPrices(it.category)&&usesStockPrices(category))) }
- val actualMeasure=selected?.measure?:measure.ifBlank { "عدد" }
- val useManual=manual||category==AssetCategory.OTHER||selected?.manualOnly==true
- LaunchedEffect(category){loadCatalog(category,false)}
- ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
-  Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(if(old==null)"افزودن دارایی" else "ویرایش دارایی",style=MaterialTheme.typography.headlineSmall,modifier=Modifier.weight(1f));IconButton(onClick=onDismiss){Icon(Icons.Default.Close,"بستن")}}
-   Choice("نوع دارایی",category,categories){if(category!=it){category=it;name="";key="";measure="";qty="";quantityIsMilligrams=false;manual=it==AssetCategory.OTHER;price="";unit="تومان";error=null}}
-   if(category==AssetCategory.OTHER){
-    OutlinedTextField(name,{name=it;error=null},label={Text("نام دارایی")},singleLine=true,modifier=Modifier.fillMaxWidth())
-   }else{
-    AssetSearch(name,category,assets,onQuery={name=it;key="";measure="";error=null},onSelect={asset->if(quantityIsMilligrams!=isGoldWeight(asset.key))qty="";quantityIsMilligrams=isGoldWeight(asset.key);name=asset.name;key=asset.key;measure=asset.measure;manual=asset.manualOnly||(old?.manual==true&&old.key==asset.key);error=null})
-   }
-   if(usesStockPrices(category)||category==AssetCategory.CRYPTO){
-    if(catalogBusy)Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp);Text("به‌روزرسانی فهرست دارایی‌ها…",fontSize=11.sp)}
-    catalogError?.let {Text(it,fontSize=11.sp,color=MaterialTheme.colorScheme.error);TextButton(onClick={loadCatalog(category,true)},enabled=!catalogBusy){Text("تلاش دوباره")}}
-   }
-   OutlinedTextField(qty,{qty=it},label={Text(if(isGoldWeight(key))"وزن (میلی‌گرم)" else if(key.isNotBlank()||category==AssetCategory.OTHER)"مقدار / تعداد ($actualMeasure)" else "مقدار / تعداد")},supportingText={if(isGoldWeight(key))Text(goldGrams(qty)?.let { "${format(it)} گرم؛ ۱۰۰۰ میلی‌گرم = ۱ گرم" }?:"مثال: ۶۷۳۸۰ میلی‌گرم = ۶۷٫۳۸۰ گرم")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
-   if(old!=null&&isGoldWeight(key)&&old.key==key&&old.qty>=BigDecimal(1000)&&number(qty)?.compareTo(old.qty*BigDecimal(1000))==0){
-    Text("وزن قبلی ${format(old.qty)} گرم ذخیره شده است. اگر عدد را به میلی‌گرم وارد کرده بودی، با دکمهٔ زیر اصلاحش کن.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-    TextButton(onClick={qty=old.qty.toPlainString()}){Text("مقدار قبلی را میلی‌گرم حساب کن")}
-   }
-   if(isCertificate(key))Text("تعداد گواهی سپرده را وارد کن؛ قیمت هر گواهی از بورس کالا دریافت می‌شود.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("قیمت را دستی وارد می‌کنم",modifier=Modifier.weight(1f));Switch(useManual,{manual=it},enabled=category!=AssetCategory.OTHER&&selected?.manualOnly!=true)}
-   if(useManual){Choice("واحد قیمت",unit,listOf("تومان","دلار")){unit=it};OutlinedTextField(price,{price=it},label={Text(if(isGoldWeight(key))"قیمت هر گرم" else "قیمت هر واحد")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())}
-   if(category==AssetCategory.PHYSICAL_GOLD)Text("ارزش طلا بدون اجرت، مالیات و کارمزد محاسبه می‌شود.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-   if(key=="IR_GOLD_24K")Text("قیمت خودکار طلای ۲۴ عیار در این منبع موجود نیست؛ قیمت را دستی ثبت کن.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-   error?.let { Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp) }
-   Button(onClick={val q=if(isGoldWeight(key))goldGrams(qty) else number(qty);val p=if(useManual)number(price) else zero;if(category!=AssetCategory.OTHER&&key.isBlank()){error="دارایی را از نتایج جست‌وجو انتخاب کن."}else if(name.isBlank()||q==null||q<=zero||p==null||(useManual&&p<=zero)){error="مقدار مثبت و مشخصات قیمت را کامل کن."}else{onSave(Holding(id=old?.id?:java.util.UUID.randomUUID().toString(),name=name.trim(),key=symbol(key),qty=q,measure=actualMeasure,type=category,manual=useManual,price=p,unit=unit))}},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ دارایی")}
-   if(old!=null)TextButton(onClick={deleteConfirm=true},modifier=Modifier.fillMaxWidth()){Text("حذف دارایی",color=MaterialTheme.colorScheme.error)}
-  }
- }
- if(deleteConfirm&&old!=null)AlertDialog(onDismissRequest={deleteConfirm=false},title={Text("حذف دارایی")},text={Text("${old.name} از فهرست حذف شود؟")},confirmButton={TextButton(onClick={onDelete(old)}){Text("حذف")}},dismissButton={TextButton(onClick={deleteConfirm=false}){Text("انصراف")}})
 }
 @Composable fun SettingsDialog(savedKey:String,savedNavasanKey:String,savedFx:String,onDismiss:()->Unit,onSave:(String,String,String)->Unit){
  var key by rememberSaveable { mutableStateOf(savedKey) };var navKey by rememberSaveable { mutableStateOf(savedNavasanKey) };var fx by rememberSaveable { mutableStateOf(savedFx) };var error by remember { mutableStateOf(false) };val context=LocalContext.current
@@ -223,7 +184,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://brsapi.ir")))}){Text("دریافت کلید بورس از BRSAPI")}
    TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.navasan.tech/api/")))}){Text("دریافت کلید ارز و طلا از نوسان")}
    Button(onClick={val rate=number(fx);if(fx.isNotBlank()&&(rate==null||rate<=zero))error=true else onSave(key,navKey,rate?.toPlainString()?:"")},modifier=Modifier.fillMaxWidth().height(56.dp),shapes=ButtonDefaults.shapes()){Text("ذخیرهٔ تنظیمات")}
-   Text("دارایی من · نسخهٔ ۲.۴",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   Text("دارایی من · نسخهٔ ۲.۵",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }
