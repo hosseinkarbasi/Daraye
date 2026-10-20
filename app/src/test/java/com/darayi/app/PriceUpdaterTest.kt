@@ -129,6 +129,21 @@ class PriceUpdaterTest {
         assertTrue(result.errors.single().contains("قیمت دستی"))
     }
 
+    @Test fun providerStatesKeepIndependentLastSuccessAndAvailableSymbolsAfterFailure() {
+        val updater = PriceUpdater(PriceApiClient { url ->
+            if (url.host == "api.brsapi.ir") Response(url,403,"private body") else Response(url,200,cryptoBody)
+        })
+        val previous = mapOf(PriceSource.STOCKS to SourceState(PriceSource.STOCKS,50,50,availableKeys=setOf("رمپنا")))
+        val result = updater.refresh(listOf(holding("رمپنا",2),holding("BTC",3)),emptyMap(),"stock-key","",previous,100)
+        assertEquals(50L,result.states[PriceSource.STOCKS]!!.lastSuccessAt)
+        assertEquals(100L,result.states[PriceSource.STOCKS]!!.lastAttemptAt)
+        assertEquals(setOf("رمپنا"),result.states[PriceSource.STOCKS]!!.availableKeys)
+        assertNotNull(result.states[PriceSource.STOCKS]!!.error)
+        assertEquals(100L,result.states[PriceSource.CRYPTO]!!.lastSuccessAt)
+        assertNull(result.states[PriceSource.CRYPTO]!!.error)
+        assertEquals(setOf("BTC"),result.states[PriceSource.CRYPTO]!!.availableKeys)
+    }
+
     @Test fun certificatesUseDedicatedApiInsteadOfRequestingOrdinaryShares() {
         val requests=mutableListOf<String>()
         val updater=PriceUpdater(PriceApiClient { url ->

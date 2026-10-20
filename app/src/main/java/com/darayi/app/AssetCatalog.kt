@@ -55,9 +55,11 @@ object AssetCatalog {
         return result
     }
 
-    fun search(assets: List<AssetOption>, category: String, query: String, limit: Int = 20): List<AssetOption> {
+    fun search(assets: List<AssetOption>, category: String, query: String, limit: Int = 20, activeKeys: Set<String>? = null): List<AssetOption> {
         val term = symbol(query)
-        if (term.isEmpty()) return assets.asSequence().filter { it.category == category }.take(limit).toList()
+        if (term.isEmpty()) return assets.filter { it.category == category }.let { rows ->
+            if (activeKeys == null) rows else rows.sortedBy { if (it.key in activeKeys) 0 else 1 }
+        }.take(limit)
         fun rank(asset: AssetOption): Int = when {
             symbol(asset.key) == term || symbol(asset.name) == term -> 0
             symbol(asset.key).startsWith(term) || symbol(asset.name).startsWith(term) -> 1
@@ -65,7 +67,7 @@ object AssetCatalog {
         }
         return assets.asSequence().filter { it.category == category }
             .filter { term.isEmpty() || symbol(it.key).contains(term) || symbol(it.name).contains(term) || symbol(it.details).contains(term) }
-            .sortedWith(compareBy<AssetOption> { rank(it) }.thenBy { it.key.length }.thenBy { it.name })
+            .sortedWith(compareBy<AssetOption> { rank(it) }.thenBy { if (activeKeys == null || it.key in activeKeys) 0 else 1 }.thenBy { it.key.length }.thenBy { it.name })
             .take(limit).toList()
     }
 

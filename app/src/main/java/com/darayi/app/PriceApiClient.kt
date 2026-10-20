@@ -43,6 +43,11 @@ class PriceApiClient(
 
     fun stockAssets(key: String): List<AssetOption> = decode(stockResponse(key), AssetCatalog::stocks)
 
+    fun stockCatalogMarket(key: String): StockMarketData = decode(stockResponse(key)) { raw ->
+        val assets = AssetCatalog.stocks(raw)
+        StockMarketData(runCatching { PriceParser.stocks(raw) }.getOrDefault(emptyMap()), assets)
+    }
+
     private fun stockResponse(key: String): String {
         if (key.isBlank()) throw PriceApiException(PriceApiFailure.MISSING_KEY)
         val encoded = URLEncoder.encode(key.trim(), "UTF-8")
@@ -60,6 +65,11 @@ class PriceApiClient(
     }
 
     fun certificateAssets(key: String): List<AssetOption> = decode(certificateResponse(key), AssetCatalog::certificates)
+
+    fun certificateCatalogMarket(key: String): StockMarketData = decode(certificateResponse(key)) { raw ->
+        val assets = AssetCatalog.certificates(raw)
+        StockMarketData(runCatching { CertificatePriceParser.prices(raw) }.getOrDefault(emptyMap()), assets)
+    }
 
     private fun certificateResponse(key: String): String {
         if (key.isBlank()) throw PriceApiException(PriceApiFailure.MISSING_KEY)
@@ -88,7 +98,7 @@ class PriceApiClient(
             try {
                 connection.connectTimeout = 18_000
                 connection.readTimeout = 18_000
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.5")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.6")
                 connection.setRequestProperty("Accept", "application/json")
                 val status = connection.responseCode
                 if (status != 200) {
