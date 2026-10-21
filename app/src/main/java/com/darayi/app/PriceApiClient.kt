@@ -98,7 +98,7 @@ class PriceApiClient(
             try {
                 connection.connectTimeout = 18_000
                 connection.readTimeout = 18_000
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.6")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Darayi/2.7")
                 connection.setRequestProperty("Accept", "application/json")
                 val status = connection.responseCode
                 if (status != 200) {

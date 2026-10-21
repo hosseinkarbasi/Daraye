@@ -8,13 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -28,9 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
@@ -95,13 +90,6 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    dismissButton = { TextButton(onClick = { vm.dismissBackup() }, enabled = !vm.saving) { Text("انصراف") } })
  }
 }
-@Composable fun AssetLogo(h:Holding){val category=categories.indexOf(h.type).coerceAtLeast(0);val color=if(h.key=="BTC")Color(0xFFF7931A)else palette[category]
- Box(Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha=.15f)),contentAlignment=Alignment.Center){
-  if(h.key=="ETH")Canvas(Modifier.size(30.dp)){val w=size.width;val he=size.height;val p=Path().apply{moveTo(w*.5f,0f);lineTo(w*.83f,he*.53f);lineTo(w*.5f,he*.69f);lineTo(w*.17f,he*.53f);close();moveTo(w*.17f,he*.6f);lineTo(w*.5f,he);lineTo(w*.83f,he*.6f);lineTo(w*.5f,he*.77f);close()};drawPath(p,color)}
-  else Text(when(h.key){"BTC"->"₿";"USD"->"$";"EUR"->"€";"GBP"->"£";"USDT"->"₮";else->when(category){0->"Au";2,4->"▥";else->h.key.ifBlank { h.name }.take(3)}},fontSize=if(h.key.length>3)17.sp else 24.sp,fontWeight=FontWeight.Bold,color=color)
- }
-}
-
 @Composable internal fun Choice(label:String,value:String,choices:List<String>,select:(String)->Unit){var open by remember { mutableStateOf(false) }
  ExposedDropdownMenuBox(expanded=open,onExpandedChange={open=it}){
   OutlinedTextField(value=value,onValueChange={},readOnly=true,label={Text(label)},shape=RoundedCornerShape(18.dp),trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(open)},modifier=Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable))
@@ -144,7 +132,7 @@ class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:
    Text("فایل شامل دارایی‌ها و نرخ دستی دلار است؛ کلیدهای API در آن ذخیره نمی‌شوند.",style=MaterialTheme.typography.bodySmall)
    OutlinedButton(onClick=onExport,enabled=!fileBusy&&!saving,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text("ذخیرهٔ فایل پشتیبان")}
    OutlinedButton(onClick=onRestore,enabled=!fileBusy&&!saving,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text("بازیابی از فایل")}
-   Text("دارایی من · نسخهٔ ۲.۶",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+   Text("دارایی من · نسخهٔ ۲.۷",fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
   }
  }
 }

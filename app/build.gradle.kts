@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.darayi.app"
  compileSdk = 35
-    defaultConfig { applicationId = "com.darayi.app"; minSdk = 26; targetSdk = 35; versionCode = 9; versionName = "2.6" }
+    defaultConfig { applicationId = "com.darayi.app"; minSdk = 26; targetSdk = 35; versionCode = 10; versionName = "2.7" }
  signingConfigs { getByName("debug") { storeFile = rootProject.file("signing/debug.keystore"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" } }
  buildFeatures { compose = true }
  defaultConfig { javaCompileOptions { annotationProcessorOptions { arguments += mapOf("room.schemaLocation" to "$projectDir/schemas") } } }

@@ -203,7 +203,6 @@ internal fun shortCategory(category: String) = when (category) {
             val narrow = maxWidth < 270.dp || LocalDensity.current.fontScale > 1.3f
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AssetLogo(h)
                     Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 25.sp))
                     if (!narrow) ValueLabel(row)
                 }
